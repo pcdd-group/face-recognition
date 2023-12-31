@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Title</title>
+  <link rel="icon" type="image/x-icon" th:href="@{face-id.ico}">
+  <style>
+    div {
+      display: flex;
+      justify-content: center;
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+
+<div>
+  <button onclick="openMedia()">打开摄像头</button>
+  <button onclick="closeMedia()">关闭摄像头</button>
+  <button onclick="drawMedia()">截取</button>
+</div>
+
+<div>
+  <video id="video" width="640" height="480" style="background: #000"></video>
+</div>
+
+<div>
+  <canvas id="qr-canvas"></canvas>
+</div>
+
+
+<script type="text/javascript">
+  let video = document.querySelector('video');
+  let canvas1 = document.getElementById('qr-canvas');
+  let context1 = canvas1.getContext('2d');
+  let mediaStreamTrack;
+
+  // 一堆兼容代码
+  /*window.URL = (window.URL || window.webkitURL || window.mozURL || window.msURL);
+  if (navigator.mediaDevices === undefined) {
+      navigator.mediaDevices = {};
+  }
+  if (navigator.mediaDevices.getUserMedia === undefined) {
+      navigator.mediaDevices.getUserMedia = function (constraints) {
+          let getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+          if (!getUserMedia) {
+              return Promise.reject(new Error('getUserMedia is not implemented in this browser'));
+          }
+          return new Promise(function (resolve, reject) {
+              getUserMedia.call(navigator, constraints, resolve, reject);
+          });
+      }
+  }*/
+
+  // 摄像头调用配置
+  let mediaOpts = {
+    audio: false,
+    video: true
+    // video: { width: 1280, height: 720 }
+    // video: { facingMode: { exact: "environment" } }// 或者 "user"
+  }
+
+  context1.clearRect(0, 0, context1.width, context1.height);
+
+  // 打开摄像头
+  function openMedia() {
+    navigator.mediaDevices.getUserMedia(mediaOpts)
+      .then(stream => {
+        mediaStreamTrack = stream;
+        video = document.querySelector('video');
+        if ("srcObject" in video) {
+          video.srcObject = stream
+        } else {
+          video.src = window.URL && window.URL.createObjectURL(stream) || stream
+        }
+        video.play();
+      })
+      .catch(err => {
+        alert(err.name);
+      });
+  }
+
+  // 关闭摄像头
+  function closeMedia() {
+    mediaStreamTrack.getVideoTracks().forEach(function (track) {
+      track.stop();
+      // 清除画布
+      context1.clearRect(0, 0, context1.width, context1.height);
+    });
+  }
+
+  // 截取视频
+  function drawMedia() {
+    canvas1.setAttribute("width", video.videoWidth.toString());
+    canvas1.setAttribute("height", video.videoHeight.toString());
+    context1.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+
+    // 将图片转成base64格式 toDataUrl可以接收2个参数，参数一：图片类型，参数二：图片质量0-1（不传默认为0.92）
+    let base64Str = canvas1.toDataURL("image/jpeg", 0.8);
+
+    // 截图发送给后端
+    fetch('http://localhost:8080/face', {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      mode: "cors", // no-cors, cors, *same-origin,
+      body: JSON.stringify({base64Str: base64Str})
+    }).then(resp => {
+      // 这个函数返回的是接口响应的值
+      return resp.json()
+    }).then(res => {
+      // 第二个 then 才是获取后台实际返回的结果
+      console.log('接口返回值', res)
+    }).catch(err => {
+      console.log('异常', err)
+    })
+  }
+</script>
+</body>
+</html>
